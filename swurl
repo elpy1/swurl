@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import logging
+import os
+import requests
+
+from boto3.session import Session
+from urllib.parse import urlparse
+from requests import Request
+from requests.auth import AuthBase
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+
+class AWSAuth(AuthBase):
+    def __init__(self, credentials, service, region):
+        self.credentials = credentials
+        self.region = region
+        self.service = service
+
+    def __call__(self, r: Request):
+        u = urlparse(r.url)
+        if not u.scheme.startswith('http'):
+            raise ValueError('invalid uri scheme')
+        if r.headers.get('host'):
+            u = u._replace(netloc=r.headers['host'])
+        if u.port in (80, 443):
+            u = u._replace(netloc=u.hostname)
+            if r.headers['host'].startswith(u.hostname):
+                r.headers['host'] = u.hostname
+        if not u.path:
+            u = u._replace(path='/')
+
+        a = AWSRequest(method=r.method.upper(), url=u.geturl(), data=r.body)
+        SigV4Auth(self.credentials, self.service, self.region).add_auth(a)
+        r.headers.update(a.headers)
+        return r
+
+
+def process_args():
+    parser = argparse.ArgumentParser(description='aws curl', prog='swurl')
+    parser.add_argument('--profile', default=os.getenv('AWS_PROFILE'), 
+                        metavar='profile', choices=Session().available_profiles)
+    parser.add_argument('--service', default=os.getenv('AWS_SERVICE'))
+    parser.add_argument('--region', default=os.getenv('AWS_REGION'))
+    parser.add_argument('--socks', default=os.getenv('SWURL_SOCKS'))
+    parser.add_argument('--request', '-X', dest='method', default='GET',
+                        choices=['GET', 'POST'])
+    parser.add_argument('--data', '-d')
+    parser.add_argument('--header', '-H', action='append')
+    parser.add_argument('--insecure', '-k', action='store_true')
+    parser.add_argument('--env', action='store_true')
+    parser.add_argument('url')
+    args = vars(parser.parse_args())
+    
+    args['headers'] = {}
+    if args.get('header'):
+        for header in args['header']:
+            if not (len(header.split()) == 2 and ':' in header):
+                raise SystemExit(f'swurl: error: invalid header')
+            k, v = header.lower().split(':', 1)
+            args['headers'][k.strip()] = v.strip()
+    if args['method'] == 'POST':
+        args['headers']['Content-Type'] = 'application/x-www-form-urlencoded'
+    return args
+
+
+def printenv(args):
+    for x in ['profile', 'service', 'region']:
+        if args.get(x):
+            print(f'export AWS_{x.upper()}="{args[x]}"')
+    if args.get('socks'):
+        print(f'export SWURL_SOCKS="{args["socks"]}"')
+    exit(0)
+
+
+def main():
+    args = process_args()
+    session = Session(profile_name=args['profile'])
+    creds = session.get_credentials()
+    method = args['method']
+    service = args['service']
+    region = args['region'] or session.region_name
+    data = args['data']
+    proxies = None
+    verify = False if args.get('insecure') else None
+
+    if args.get('data') and args['data'].startswith('@'):
+        f = ''.join(args['data'].split('@'))
+        data = ''.join([line.strip() for line in open(f)])
+    
+    if args['socks']:
+        proxies = dict(https=f'socks5h://{args["socks"]}')
+
+    if args.get('env'): printenv(args)
+
+    try:
+        awsauth = AWSAuth(creds, service, region)
+        resp = requests.request(
+                method=method,
+                url=args['url'],
+                data=data,
+                proxies=proxies,
+                headers=args.get('headers'),
+                auth=awsauth,
+                verify=verify)
+    except Exception as e:
+        raise SystemExit(f'error: swurl: {e.__class__.__name__}: {e}')
+    else:
+        print(resp.text)
+
+
+main()
