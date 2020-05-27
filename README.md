@@ -17,7 +17,7 @@ This tool only exists so I could provide a way to communicate with an endpoint i
 **NOTE:** There are other tools out there that already provide `curl`-like functionality that are probably better managed and supported. 
 
 **Some thoughts after working on this:**
-- It would be cool if there was consistency between service names and service endpoints. This would allow us to easily derive both the `region` and `service`  from the endpoint itself. For example, the service name required for signing requests with AWS for Neptune is `neptune-db` but all cluster and instance endpoints are in format: `{identifier}.{region}.{neptune}.amazonaws.com`
+- It would be cool if there was consistency between service names and service endpoints. This would allow us to easily derive both the `region` and `service`  from the endpoint itself. For example, the service name required when signing requests for AWS for Neptune is `neptune-db` but all cluster and instance endpoints are in format: `{identifier}.{region}.{neptune}.amazonaws.com`
 - `botocore` should allow something other than `HTTPS_PROXY` as an option to provide proxy config. Maybe a unique environment variable such as `AWS_PROXY` or a configuration option. Not saying they should ignore the standard env var but what if I only want to proxy `botocore` functions without affecting other applications?
 - `socks5` is awesome. Dynamic port forwarding over SSH in general is a powerful tool for accessing AWS resources and services if you don't have a VPN. With a single `ssh` command I have access to my VPC and multiple services which are not publicly exposed e.g. `neptune` and `es`. This can be combined with AWS SSM to achieve access without exposing any public resources.  
    
