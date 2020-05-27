@@ -2,13 +2,14 @@
 # swurl
 A python tool intended to provide very basic functionality similar to `curl`, allowing you to make signed HTTP requests to AWS service endpoints over `socks5`.  
   
-
-
+  
+   
 ## Requirements
 - awscli configured locally
 - python3 and `botocore` pip module
-- SSH access to EC2 instance in same VPC with port forwarding ability
-
+- SSH access to EC2 instance in same VPC with port forwarding ability  
+   
+  
 ## Info
 
 This tool only exists so I could provide a way to communicate with an endpoint in a private VPC over SOCKS proxy. It started as a simple request to help access a DB instance and soon turned into both a learning exercise and guide. I've documented it below in case others find it useful or helpful.
@@ -18,9 +19,9 @@ This tool only exists so I could provide a way to communicate with an endpoint i
 **Some thoughts after working on this:**
 - It would be cool if there was consistency between service names and service endpoints. This would allow us to easily derive both the `region` and `service`  from the endpoint itself. For example, the service name required for signing requests with AWS for Neptune is `neptune-db` but all cluster and instance endpoints are in format: `{identifier}.{region}.{neptune}.amazonaws.com`
 - `botocore` should allow something other than `HTTPS_PROXY` as an option to provide proxy config. Maybe a unique environment variable such as `AWS_PROXY` or a configuration option. Not saying they should ignore the standard env var but what if I only want to proxy `botocore` functions without affecting other applications?
-- `socks5` is awesome. Dynamic port forwarding over SSH in general is a powerful tool for accessing AWS resources and services if you don't have a VPN. With a single `ssh` command I have access to my VPC and multiple services which are not publicly exposed e.g. `neptune` and `es`. This can be combined with AWS SSM to achieve access without exposing any public resources.
-
-
+- `socks5` is awesome. Dynamic port forwarding over SSH in general is a powerful tool for accessing AWS resources and services if you don't have a VPN. With a single `ssh` command I have access to my VPC and multiple services which are not publicly exposed e.g. `neptune` and `es`. This can be combined with AWS SSM to achieve access without exposing any public resources.  
+   
+   
 ## Accessing private resources inside a VPC
 So, you've launched a new AWS Neptune cluster and now need to query it remotely via the rest API. A few things worth noting:
 
@@ -28,16 +29,18 @@ So, you've launched a new AWS Neptune cluster and now need to query it remotely 
 - It will only respond to local requests from within the VPC
 - Neptune does not expose any public cluster or instance endpoints
 - All connections must be over TLS (enforced in `ap-southeast-2`)
-- Username/password auth is not an option for neptune so IAM authentication it is
-
+- Username/password auth is not an option for neptune so IAM authentication it is  
+  
+    
 ## General strategies to provide access    
 - Expose a public NLB that terminates SSL and proxies requests to the cluster endpoint
 - Expose a public ALB that forwards requests to `haproxy`  running on EC2, which then proxies requests to Neptune
 - Setup API gateway and expose an endpoint. This triggers a lambda function with permission to query neptune and return the results. Could be set up to accept either IAM for auth or a custom lambda authoriser
 - dedicated VPN to the VPC
 
-See some samples from AWS -> https://github.com/aws-samples/aws-dbs-refarch-graph/tree/master/src/connecting-using-a-load-balancer
-
+See some samples from AWS -> https://github.com/aws-samples/aws-dbs-refarch-graph/tree/master/src/connecting-using-a-load-balancer  
+    
+   
 ## Access using SSH (and SSM?)
 
 Here we will go over some of the ways you can use SSH to access private resources in your VPC.  
@@ -75,10 +78,11 @@ But, by making use of AWS SSM we can access our neptune cluster without exposing
 
 For more information on SSH and SSM, see the official documentation here -> https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started-enable-ssh-connections.html
 
-I won't be going over how to set up SSM in this guide but continue reading for details on SSH.
-
-## How to forward all the ports using SSH
-
+I won't be going over how to set up SSM in this guide but continue reading for details on SSH.  
+  
+    
+## How to forward all the ports using SSH  
+  
 ### Local port forwarding
 
 One  way of achieving this is to setup local port forwarding via SSH.  For example:
@@ -136,10 +140,10 @@ $ curl -k https://localhost:8182/status -H 'Host: name.cluster-identifier.ap-sou
 ```
 **NOTE**:  This is not a solution and will not always work. Applications are not required to have functionality allowing you to ignore or bypass SSL hostname verification. Consider having `ssh` bind to a local port on something like `127.0.1.10` and using your `hosts` file if you need to make this work.
 
-It's still annoying though having to manually specify the `host` header every time we make a request. We also potentially need to implement alternate logic in our code to account for when we use local port forwarding..
-
-
-### Dynamic port forwarding (SOCKS)
+It's still annoying though having to manually specify the `host` header every time we make a request. We also potentially need to implement alternate logic in our code to account for when we use local port forwarding..  
+  
+  
+### Dynamic port forwarding (SOCKS)  
 
 As I've come to discover, most if not all AWS services support dynamic port forwarding over SOCKS. This means we can tell `ssh` to bind to a local port and act as a SOCKS proxy server. When we connect to the local port the request is forwarded over the secure tunnel to the bastion and then to the relevant endpoint based on the application protocol (determined by the `hostname` and `port` in our request). We can now send HTTPS requests without having to worry about specifying the `host` header each time!
   
@@ -166,9 +170,9 @@ $ dig name.cluster-identifier.ap-southeast-2.neptune.amazonaws.com @1.1.1.1 +sho
 instance20200521052459345800000002.identifier.ap-southeast-2.neptune.amazonaws.com.
 10.0.40.33
 ```
+     
     
-    
-### Using socks5h
+### Using socks5h  
   
 A solution to our problem, implemented by `libcurl`, is `socks5h` (`CURLPROXY_SOCKS5_HOSTNAME`) [0]. The difference between this and regular `socks5` is that we tell the SSH proxy to take care of DNS resolution (in our case, via the bastion). Now we can query the endpoint directly even though we can't resolve DNS locally:
 ```
@@ -176,10 +180,10 @@ $ curl -x socks5h://localhost:8888 https://name.cluster-identifier.ap-southeast-
 {"requestId":"494c6472-b1b5-42ce-80d0-d7d2a46266cd","code":"AccessDeniedException","detailedMessage":"Missing Authentication Token"}
 ```
 FYI the python `requests` library supports the `socks5h` implementation. Many applications make use of `libcurl` and hopefully more libraries will support the `hostname` implementation of `socks5` in future.
-[0] https://curl.haxx.se/libcurl/c/CURLOPT_SOCKS_PROXY.html
-
-
-## IAM Authentication
+[0] https://curl.haxx.se/libcurl/c/CURLOPT_SOCKS_PROXY.html  
+  
+  
+## IAM Authentication  
 
 And now, the last piece of the puzzle.. how do we authenticate using our IAM credentials when making HTTP `GET` or `POST` requests?
 
@@ -188,8 +192,9 @@ Basically, we need to sign our request by attaching authentication information i
 See here for more information -> https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
 
 After trying out a couple of tools I ran into some issues when specifying non-standard URLs e.g. while using  port forwarding with custom `host` headers. Being able to specify a `socks5h` proxy was also a requirement in my case. I ended up putting together `swurl` which makes use of `botocore`'s signing functions.
-
-## Usage examples
+  
+    
+## Usage examples  
 
 Query `GetCallerIdentity` using `GET` request to AWS STS endpoint:
 ```
