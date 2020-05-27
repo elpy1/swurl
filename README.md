@@ -77,9 +77,10 @@ For more information on SSH and SSM, see the official documentation here -> http
 
 I won't be going over how to set up SSM in this guide but continue reading for details on SSH.
 
-### Methods of access using SSH
+## How to forward all the ports using SSH
 
-**Local port forwarding**
+### Local port forwarding
+
 One  way of achieving this is to setup local port forwarding via SSH.  For example:
 ```
 $ ssh -f -NT user@bastion.host.com -L 8182:name.cluster-identifier.ap-southeast-2.neptune.amazonaws.com:8182
@@ -138,7 +139,7 @@ $ curl -k https://localhost:8182/status -H 'Host: name.cluster-identifier.ap-sou
 It's still annoying though having to manually specify the `host` header every time we make a request. We also potentially need to implement alternate logic in our code to account for when we use local port forwarding..
 
 
-**Dynamic port forwarding (SOCKS)**
+### Dynamic port forwarding (SOCKS)
 
 As I've come to discover, most if not all AWS services support dynamic port forwarding over SOCKS. This means we can tell `ssh` to bind to a local port and act as a SOCKS proxy server. When we connect to the local port the request is forwarded over the secure tunnel to the bastion and then to the relevant endpoint based on the application protocol (determined by the `hostname` and `port` in our request). We can now send HTTPS requests without having to worry about specifying the `host` header each time!
   
@@ -167,7 +168,7 @@ instance20200521052459345800000002.identifier.ap-southeast-2.neptune.amazonaws.c
 ```
     
     
-**Using socks5h**
+### Using socks5h
   
 A solution to our problem, implemented by `libcurl`, is `socks5h` (`CURLPROXY_SOCKS5_HOSTNAME`) [0]. The difference between this and regular `socks5` is that we tell the SSH proxy to take care of DNS resolution (in our case, via the bastion). Now we can query the endpoint directly even though we can't resolve DNS locally:
 ```
